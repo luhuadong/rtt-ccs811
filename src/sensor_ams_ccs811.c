@@ -11,7 +11,7 @@
 #include <board.h>
 #include "ccs811.h"
 
-#define DBG_TAG "sensor.sensirion.sgp30"
+#define DBG_TAG "sensor.ams.ccs811"
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 

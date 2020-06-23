@@ -13,17 +13,17 @@
 #include <string.h>
 #include "ccs811.h"
 
-#define DBG_TAG "sensor.sensirion.sgp30"
+#define DBG_TAG "sensor.ams.ccs811"
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
-/* SGP30 constants */
+/* CCS811 constants */
 #define SGP30_FEATURESET               (0x0020)  /* The required set for this library */
 #define SGP30_CRC8_POLYNOMIAL          (0x31)    /* Seed for SGP30's CRC polynomial */
 #define SGP30_CRC8_INIT                (0xFF)    /* Init value for CRC */
 #define SGP30_WORD_LEN                 (2)       /* 2 bytes per word */
 
-/* SGP30 commands */
+/* CCS811 commands */
 #define Init_air_quality               (0x2003)
 #define Measure_air_quality            (0x2008)
 #define Get_baseline                   (0x2015)
@@ -34,8 +34,6 @@
 #define Measure_raw_signals            (0x2050)
 #define Get_Serial_ID                  (0x3682)
 
-
-//#ifdef PKG_USING_SGP30
 
 /*!
  *  @brief  calculates 8-Bit checksum with given polynomial
@@ -282,7 +280,7 @@ static rt_err_t sensor_init(sgp30_device_t dev)
     return RT_EOK;
 }
 
-rt_err_t sgp30_init(struct sgp30_device *dev, const char *i2c_bus_name)
+rt_err_t ccs811_init(struct sgp30_device *dev, const char *i2c_bus_name)
 {
     RT_ASSERT(i2c_bus_name);
 
@@ -306,13 +304,13 @@ rt_err_t sgp30_init(struct sgp30_device *dev, const char *i2c_bus_name)
 }
 
 /**
- * This function initializes sgp30 registered device driver
+ * This function initializes ccs811 registered device driver
  *
- * @param dev the name of sgp30 device
+ * @param dev the name of ccs811 device
  *
- * @return the sgp30 device.
+ * @return the ccs811 device.
  */
-sgp30_device_t sgp30_create(const char *i2c_bus_name)
+ccs811_device_t ccs811_create(const char *i2c_bus_name)
 {
     RT_ASSERT(i2c_bus_name);
 
@@ -352,7 +350,7 @@ sgp30_device_t sgp30_create(const char *i2c_bus_name)
  *
  * @param dev the pointer of device driver structure
  */
-void sgp30_delete(sgp30_device_t dev)
+void ccs811_delete(ccs811_device_t dev)
 {
     if (dev)
     {
@@ -360,5 +358,3 @@ void sgp30_delete(sgp30_device_t dev)
         rt_free(dev);
     }
 }
-
-//#endif /* PKG_USING_SGP30 */

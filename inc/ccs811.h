@@ -16,11 +16,34 @@
 #include <sensor.h>
 #include <board.h>
 
-#define CCS811LIB_VERSION               "0.0.1"
+#define CCS811_PACKAGE_VERSION                   "0.0.1"
 
 /* CCS811 i2c address */
-#define CCS811_I2CADDR                 (0x5B)    /* Default I2C Address */
-#define CCS811_I2CADDR                 (0x5A)    /* Alternate I2C Address */
+#define CCS811_I2C_ADDRESS1                      0x5A
+#define CCS811_I2C_ADDRESS2                      0x5B
+
+#define CCS811_REG_STATUS                        0x00
+#define CCS811_REG_MEAS_MODE                     0x01
+#define CCS811_REG_ALG_RESULT_DATA               0x02
+#define CCS811_REG_RAW_DATA                      0x03
+#define CCS811_REG_ENV_DATA                      0x05
+#define CCS811_REG_NTC                           0x06
+#define CCS811_REG_THRESHOLDS                    0x10
+#define CCS811_REG_BASELINE                      0x11
+#define CCS811_REG_HW_ID                         0x20
+#define CCS811_REG_HW_VERSION                    0x21
+#define CCS811_REG_FW_BOOT_VERSION               0x23
+#define CCS811_REG_FW_APP_VERSION                0x24
+#define CCS811_REG_INTERNAL_STATE                0xA0
+#define CCS811_REG_ERROR_ID                      0xE0
+#define CCS811_REG_SW_RESET                      0xFF
+
+#define CCS811_BOOTLOADER_APP_ERASE              0xF1
+#define CCS811_BOOTLOADER_APP_DATA               0xF2
+#define CCS811_BOOTLOADER_APP_VERIFY             0xF3
+#define CCS811_BOOTLOADER_APP_START              0xF4
+
+#define CCS811_HW_ID                             0x81
 
 /* Custom sensor control cmd types */
 #define  RT_SENSOR_CTRL_GET_BASELINE   (0x110)   /* Get device id */
@@ -29,21 +52,31 @@
 
 typedef enum
 {
-	eClosed,      /* Idle (Measurements are disabled in this mode) */
-	eCycle_1s,    /* Constant power mode, IAQ measurement every second */
-	eCycle_10s,   /* Pulse heating mode IAQ measurement every 10 seconds */
-	eCycle_60s,   /* Low power pulse heating mode IAQ measurement every 60 seconds */
-	eCycle_250ms  /* Constant power mode, sensor measurement every 250ms */
+    CCS811_CLOSED,      /* Idle (Measurements are disabled in this mode) */
+    CCS811_CYCLE_1S,    /* Constant power mode, IAQ measurement every second */
+    CCS811_CYCLE_10S,   /* Pulse heating mode IAQ measurement every 10 seconds */
+    CCS811_CYCLE_60S,   /* Low power pulse heating mode IAQ measurement every 60 seconds */
+    CCS811_CYCLE_250MS  /* Constant power mode, sensor measurement every 250ms */
 
-} eCycle_t;
+} ccs811_cycle_t;
 
-struct sgp30_baseline
+typedef enum
+{
+    CCS811_MODE_0,      /* Idle (Measurements are disabled in this mode) */
+    CCS811_MODE_1,      /* Constant power mode, IAQ measurement every second */
+    CCS811_MODE_2,      /* Pulse heating mode IAQ measurement every 10 seconds */
+    CCS811_MODE_3,      /* Low power pulse heating mode IAQ measurement every 60 seconds */
+    CCS811_MODE_4       /* Constant power mode, sensor measurement every 250ms 1xx: Reserved modes (For future use) */
+
+} ccs811_mode_t;
+
+struct ccs811_baseline
 {
     rt_uint16_t eco2_base;
     rt_uint16_t tvoc_base;
 };
 
-struct sgp30_device
+struct ccs811_device
 {
 	struct rt_i2c_bus_device *i2c;
 
@@ -56,21 +89,21 @@ struct sgp30_device
 	rt_bool_t   is_ready;
 	rt_mutex_t  lock;
 };
-typedef struct sgp30_device *sgp30_device_t;
+typedef struct ccs811_device *ccs811_device_t;
 
 
-rt_err_t       sgp30_init(struct sgp30_device *dev, const char *i2c_bus_name);
-sgp30_device_t sgp30_create(const char *i2c_bus_name);
-void           sgp30_delete(sgp30_device_t dev);
+rt_err_t        ccs811_init(struct ccs811_device *dev, const char *i2c_bus_name);
+ccs811_device_t ccs811_create(const char *i2c_bus_name);
+void            ccs811_delete(ccs811_device_t dev);
 
-rt_bool_t sgp30_measure(sgp30_device_t dev);
-rt_bool_t sgp30_measure_raw(sgp30_device_t dev);
+rt_bool_t ccs811_measure(ccs811_device_t dev);
+rt_bool_t ccs811_measure_raw(ccs811_device_t dev);
 
-rt_bool_t sgp30_get_baseline(sgp30_device_t dev, rt_uint16_t *eco2_base, rt_uint16_t *tvoc_base);
-rt_bool_t sgp30_set_baseline(sgp30_device_t dev, rt_uint16_t eco2_base, rt_uint16_t tvoc_base);
-rt_bool_t sgp30_set_humidity(sgp30_device_t dev, rt_uint32_t absolute_humidity);
+rt_bool_t ccs811_get_baseline(ccs811_device_t dev, rt_uint16_t *eco2_base, rt_uint16_t *tvoc_base);
+rt_bool_t ccs811_set_baseline(ccs811_device_t dev, rt_uint16_t eco2_base, rt_uint16_t tvoc_base);
+rt_bool_t ccs811_set_humidity(ccs811_device_t dev, rt_uint32_t absolute_humidity);
 
 
-rt_err_t rt_hw_sgp30_init(const char *name, struct rt_sensor_config *cfg);
+rt_err_t rt_hw_ccs811_init(const char *name, struct rt_sensor_config *cfg);
 
 #endif /* __CCS811_H__ */
