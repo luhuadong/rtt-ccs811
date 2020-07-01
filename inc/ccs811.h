@@ -91,18 +91,20 @@ struct ccs811_device
 };
 typedef struct ccs811_device *ccs811_device_t;
 
-
 rt_err_t        ccs811_init(struct ccs811_device *dev, const char *i2c_bus_name);
 ccs811_device_t ccs811_create(const char *i2c_bus_name);
 void            ccs811_delete(ccs811_device_t dev);
 
+rt_uint16_t get_co2_ppm(ccs811_device_t dev);
+rt_uint16_t get_tvoc_ppb(ccs811_device_t dev);
+
 rt_bool_t ccs811_measure(ccs811_device_t dev);
-rt_bool_t ccs811_measure_raw(ccs811_device_t dev);
+rt_bool_t ccs811_measure_cycle(ccs811_device_t dev, ccs811_cycle_t cycle);
+rt_bool_t ccs811_measure_mode(ccs811_device_t dev, rt_uint8_t thresh, rt_uint8_t interrupt, ccs811_mode_t mode);
 
-rt_bool_t ccs811_get_baseline(ccs811_device_t dev, rt_uint16_t *eco2_base, rt_uint16_t *tvoc_base);
-rt_bool_t ccs811_set_baseline(ccs811_device_t dev, rt_uint16_t eco2_base, rt_uint16_t tvoc_base);
-rt_bool_t ccs811_set_humidity(ccs811_device_t dev, rt_uint32_t absolute_humidity);
-
+rt_uint16_t ccs811_get_baseline(ccs811_device_t dev);
+rt_bool_t   ccs811_set_baseline(ccs811_device_t dev, rt_uint16_t baseline);
+rt_bool_t   ccs811_set_envparas(ccs811_device_t dev, float temperature, float humidity);
 
 rt_err_t rt_hw_ccs811_init(const char *name, struct rt_sensor_config *cfg);
 
