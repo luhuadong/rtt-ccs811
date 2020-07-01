@@ -66,7 +66,7 @@ read_word_from_command(struct rt_i2c_bus_device *bus,
                        rt_uint8_t                readlen)
 {
     /* Request */
-    rt_i2c_master_send(bus, SGP30_I2CADDR, RT_I2C_WR, cmd, cmdlen);
+    rt_i2c_master_send(bus, CCS811_I2C_ADDRESS, RT_I2C_WR, cmd, cmdlen);
 
     rt_thread_mdelay(delayms);
 
@@ -77,7 +77,7 @@ read_word_from_command(struct rt_i2c_bus_device *bus,
     rt_uint8_t replylen = readlen * (SGP30_WORD_LEN + 1);
     rt_uint8_t reply[replylen];
 
-    if (rt_i2c_master_recv(bus, SGP30_I2CADDR, RT_I2C_RD, reply, replylen) != replylen)
+    if (rt_i2c_master_recv(bus, CCS811_I2C_ADDRESS, RT_I2C_RD, reply, replylen) != replylen)
         return RT_FALSE;
 
     /* Generate CRC */

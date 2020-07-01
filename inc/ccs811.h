@@ -21,13 +21,13 @@
 /* CCS811 i2c address */
 #define CCS811_I2C_ADDRESS1                      0x5A
 #define CCS811_I2C_ADDRESS2                      0x5B
+#define CCS811_I2C_ADDRESS                       PKG_USING_CCS811_I2C_ADDRESS
 
 #define CCS811_REG_STATUS                        0x00
 #define CCS811_REG_MEAS_MODE                     0x01
 #define CCS811_REG_ALG_RESULT_DATA               0x02
 #define CCS811_REG_RAW_DATA                      0x03
 #define CCS811_REG_ENV_DATA                      0x05
-#define CCS811_REG_NTC                           0x06
 #define CCS811_REG_THRESHOLDS                    0x10
 #define CCS811_REG_BASELINE                      0x11
 #define CCS811_REG_HW_ID                         0x20
