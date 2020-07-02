@@ -82,9 +82,6 @@ struct ccs811_device
 
 	rt_uint16_t TVOC;
 	rt_uint16_t eCO2;
-	rt_uint16_t rawH2;
-	rt_uint16_t rawEthanol;
-	rt_uint16_t serialnumber[3];
 
 	rt_bool_t   is_ready;
 	rt_mutex_t  lock;
@@ -95,8 +92,9 @@ rt_err_t        ccs811_init(struct ccs811_device *dev, const char *i2c_bus_name)
 ccs811_device_t ccs811_create(const char *i2c_bus_name);
 void            ccs811_delete(ccs811_device_t dev);
 
-rt_uint16_t get_co2_ppm(ccs811_device_t dev);
-rt_uint16_t get_tvoc_ppb(ccs811_device_t dev);
+rt_bool_t   ccs811_check_ready(ccs811_device_t dev);
+rt_uint16_t ccs811_get_co2_ppm(ccs811_device_t dev);
+rt_uint16_t ccs811_get_tvoc_ppb(ccs811_device_t dev);
 
 rt_bool_t ccs811_measure(ccs811_device_t dev);
 rt_bool_t ccs811_measure_cycle(ccs811_device_t dev, ccs811_cycle_t cycle);

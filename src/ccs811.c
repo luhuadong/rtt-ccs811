@@ -96,6 +96,21 @@ read_word_from_command(struct rt_i2c_bus_device *bus,
     return RT_TRUE;
 }
 
+rt_bool_t ccs811_check_ready(ccs811_device_t dev)
+{
+    rt_uint8_t status = 0;
+    rt_uint8_t cmd[1] = {CCS811_REG_STATUS};
+
+    if (!read_word_from_command(dev->i2c, cmd, 1, 10, &status, 1))
+        return RT_FALSE;
+
+    LOG_D("sensor status: 0x%x", status);
+    if (!((status >> 3) & 0x01))
+        return RT_FALSE;
+    else 
+        return RT_TRUE;
+}
+
 /*!
  *  @brief  Commands the sensor to take a single eCO2/VOC measurement. Places
  *          results in {@link TVOC} and {@link eCO2}
@@ -155,24 +170,17 @@ rt_bool_t sgp30_measure_raw(sgp30_device_t dev)
  *   @return True if command completed successfully, false if something went
  *           wrong!
  */
-rt_bool_t 
-sgp30_get_baseline(sgp30_device_t dev, rt_uint16_t *eco2_base, rt_uint16_t *tvoc_base)
+rt_uint16_t ccs811_get_baseline(ccs811_device_t dev)
 {
 	RT_ASSERT(dev);
 
-    rt_uint8_t  cmd[2];
-    rt_uint16_t reply[2];
-
-    cmd[0] = 0x20;  /* Get_baseline */
-    cmd[1] = 0x15;
+    rt_uint8_t cmd[1] = {CCS811_REG_BASELINE};
+    rt_uint8_t reply[2];
     
-    if (!read_word_from_command(dev->i2c, cmd, 2, 10, reply, 2))
+    if (!read_word_from_command(dev->i2c, cmd, 1, 10, reply, 2))
         return RT_FALSE;
 
-    *eco2_base = reply[0];
-    *tvoc_base = reply[1];
-
-    return RT_TRUE;
+    return reply[0] << 8 | reply[1];
 }
 
 /*!
@@ -185,22 +193,16 @@ sgp30_get_baseline(sgp30_device_t dev, rt_uint16_t *eco2_base, rt_uint16_t *tvoc
  *  @return True if command completed successfully, false if something went
  *          wrong!
  */
-rt_bool_t 
-sgp30_set_baseline(sgp30_device_t dev, rt_uint16_t eco2_base, rt_uint16_t tvoc_base)
+rt_bool_t ccs811_set_baseline(ccs811_device_t dev, rt_uint16_t baseline);
 {
 	RT_ASSERT(dev);
 
-    rt_uint8_t cmd[8];
-    cmd[0] = 0x20;
-    cmd[1] = 0x1e;
-    cmd[2] = tvoc_base >> 8;
-    cmd[3] = tvoc_base & 0xFF;
-    cmd[4] = generate_crc(cmd + 2, 2);
-    cmd[5] = eco2_base >> 8;
-    cmd[6] = eco2_base & 0xFF;
-    cmd[7] = generate_crc(cmd + 5, 2);
+    rt_uint8_t cmd[3];
+    cmd[0] = CCS811_REG_BASELINE;
+    cmd[1] = baseline >> 8;
+    cmd[2] = baseline;
 
-    return read_word_from_command(dev->i2c, cmd, 8, 10, RT_NULL, 0);
+    return read_word_from_command(dev->i2c, cmd, 3, 10, RT_NULL, 0);
 }
 
 /*!
@@ -246,36 +248,39 @@ sgp30_set_humidity(sgp30_device_t dev, rt_uint32_t absolute_humidity)
  */
 static rt_err_t sensor_init(sgp30_device_t dev)
 {
-    rt_uint8_t cmd[2] = {0, 0};
-    rt_uint16_t featureset;
+    rt_uint8_t cmd[5] = {0};
+    rt_uint8_t hardware_id = 0;
 
-    /* Soft Reset: Reset Command using the General Call address */
-    cmd[0] = 0x00;
-    cmd[1] = 0x06;
-    if (!read_word_from_command(dev->i2c, cmd, 2, 10, RT_NULL, 0))
+    /* Soft reset */
+    cmd[0] = CCS811_REG_SW_RESET;
+    cmd[1] = 0x11;
+    cmd[2] = 0xE5;
+    cmd[3] = 0x72;
+    cmd[4] = 0x8A;
+    if (!read_word_from_command(dev->i2c, cmd, 5, 10, RT_NULL, 0))
+        return -RT_ERROR;
+    
+    /* Get sensor id */
+    cmd[0] = CCS811_HW_ID;
+    if (!read_word_from_command(dev->i2c, cmd, 1, 10, &hardware_id, 1))
         return -RT_ERROR;
 
-    /* Get_Serial_ID */
-    cmd[0] = 0x36;
-    cmd[1] = 0x82;
-    if (!read_word_from_command(dev->i2c, cmd, 2, 10, dev->serialnumber, 3))
+    if (hardware_id != CCS811_HW_ID)
+    {
+        LOG_E("sensor hardware id not 0x%x", CCS811_HW_ID);
         return -RT_ERROR;
+    }
 
-    /* Get_feature_set_version */
-    cmd[0] = 0x20;
-    cmd[1] = 0x2F;
-    if (!read_word_from_command(dev->i2c, cmd, 2, 10, &featureset, 1))
+    /* Start app */
+    cmd[0] = CCS811_BOOTLOADER_APP_START;
+    if (!read_word_from_command(dev->i2c, cmd, 1, 10, RT_NULL, 0))
         return -RT_ERROR;
+    
+    /* Set measurement mode */
+    //setMeasurementMode(0,0,eMode4);
 
-    //rt_kprintf("(SGP30) Featureset 0x%x\n", featureset);
-    if ((featureset & 0xF0) != SGP30_FEATURESET)
-        return -RT_ERROR;
-
-    /* Init_air_quality */
-    cmd[0] = 0x20;
-    cmd[1] = 0x03;
-    if(!read_word_from_command(dev->i2c, cmd, 2, 10, RT_NULL, 0))
-        return -RT_ERROR;
+    /* Set env data */
+    //setInTempHum(25, 50);
 
     return RT_EOK;
 }
