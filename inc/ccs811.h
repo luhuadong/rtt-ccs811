@@ -46,9 +46,13 @@
 #define CCS811_HW_ID                             0x81
 
 /* Custom sensor control cmd types */
-#define  RT_SENSOR_CTRL_GET_BASELINE   (0x110)   /* Get device id */
-#define  RT_SENSOR_CTRL_SET_BASELINE   (0x111)   /* Set the measure range of sensor. unit is info of sensor */
-#define  RT_SENSOR_CTRL_SET_HUMIDITY   (0x112)   /* Set output date rate. unit is HZ */
+#define  RT_SENSOR_CTRL_GET_BASELINE             (0x110)   /* Get device id */
+#define  RT_SENSOR_CTRL_SET_BASELINE             (0x111)   /* Set the measure range of sensor. unit is info of sensor */
+#define  RT_SENSOR_CTRL_SET_ENVDATA              (0x112)   /* Set output date rate. unit is HZ */
+#define  RT_SENSOR_CTRL_GET_MEAS_MODE            (0x113)
+#define  RT_SENSOR_CTRL_SET_MEAS_MODE            (0x114)
+#define  RT_SENSOR_CTRL_SET_MEAS_CYCLE           (0x115)
+#define  RT_SENSOR_CTRL_SET_THRESHOLDS           (0x116)
 
 typedef enum
 {
@@ -76,11 +80,17 @@ struct ccs811_baseline
     rt_uint16_t tvoc_base;
 };
 
+struct ccs811_envdata
+{
+    float temperature;
+    float humidity;
+};
+
 struct ccs811_device
 {
 	struct rt_i2c_bus_device *i2c;
 
-	rt_uint16_t TVOC;
+	rt_uint16_t eTVOC;
 	rt_uint16_t eCO2;
 
 	rt_bool_t   is_ready;
@@ -96,13 +106,15 @@ rt_bool_t   ccs811_check_ready(ccs811_device_t dev);
 rt_uint16_t ccs811_get_co2_ppm(ccs811_device_t dev);
 rt_uint16_t ccs811_get_tvoc_ppb(ccs811_device_t dev);
 
-rt_bool_t ccs811_measure(ccs811_device_t dev);
-rt_bool_t ccs811_measure_cycle(ccs811_device_t dev, ccs811_cycle_t cycle);
-rt_bool_t ccs811_measure_mode(ccs811_device_t dev, rt_uint8_t thresh, rt_uint8_t interrupt, ccs811_mode_t mode);
+rt_bool_t  ccs811_measure(ccs811_device_t dev);
+rt_bool_t  ccs811_set_measure_cycle(ccs811_device_t dev, ccs811_cycle_t cycle);
+rt_bool_t  ccs811_set_measure_mode(ccs811_device_t dev, rt_uint8_t thresh, rt_uint8_t interrupt, ccs811_mode_t mode);
+rt_uint8_t ccs811_get_measure_mode(ccs811_device_t dev);
+rt_bool_t  ccs811_set_thresholds(ccs811_device_t dev, rt_uint16_t low_to_med, rt_uint16_t med_to_high);
 
 rt_uint16_t ccs811_get_baseline(ccs811_device_t dev);
 rt_bool_t   ccs811_set_baseline(ccs811_device_t dev, rt_uint16_t baseline);
-rt_bool_t   ccs811_set_envparas(ccs811_device_t dev, float temperature, float humidity);
+rt_bool_t   ccs811_set_envdata(ccs811_device_t dev, float temperature, float humidity);
 
 rt_err_t rt_hw_ccs811_init(const char *name, struct rt_sensor_config *cfg);
 

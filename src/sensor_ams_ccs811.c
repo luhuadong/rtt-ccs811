@@ -15,23 +15,6 @@
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
-/* SGP30 constants */
-#define SGP30_FEATURESET               (0x0020)  /* The required set for this library */
-#define SGP30_CRC8_POLYNOMIAL          (0x31)    /* Seed for SGP30's CRC polynomial */
-#define SGP30_CRC8_INIT                (0xFF)    /* Init value for CRC */
-#define SGP30_WORD_LEN                 (2)       /* 2 bytes per word */
-
-/* SGP30 commands */
-#define Init_air_quality               (0x2003)
-#define Measure_air_quality            (0x2008)
-#define Get_baseline                   (0x2015)
-#define Set_baseline                   (0x201e)
-#define Set_humidity                   (0x2061)
-#define Measure_test                   (0x2032)
-#define Get_feature_set_version        (0x202f)
-#define Measure_raw_signals            (0x2050)
-#define Get_Serial_ID                  (0x3682)
-
 /* range */
 #define SENSOR_ECO2_RANGE_MIN          (400)
 #define SENSOR_ECO2_RANGE_MAX          (29206)
@@ -48,147 +31,75 @@
 #define SENSOR_ECO2_FIFO_MAX           SENSOR_FIFO_MAX
 #define SENSOR_TVOC_FIFO_MAX           SENSOR_FIFO_MAX
 
-/*!
- *  @brief  calculates 8-Bit checksum with given polynomial
- */
-static rt_uint8_t generate_crc(rt_uint8_t data[], rt_uint8_t datalen)
-{
-    rt_uint8_t crc = SGP30_CRC8_INIT;
-
-    for (rt_uint8_t i = 0; i < datalen; i++) {
-        crc ^= data[i];
-        for (rt_uint8_t b = 0; b < 8; b++) {
-            if (crc & 0x80)
-                crc = (crc << 1) ^ SGP30_CRC8_POLYNOMIAL;
-            else
-                crc <<= 1;
-        }
-    }
-    return crc;
-}
-
-/*!
- *  @brief  I2C low level interfacing
- */
-static rt_bool_t 
-read_word_from_command(struct rt_i2c_bus_device *bus,
-                       rt_uint8_t                cmd[], 
-                       rt_uint8_t                cmdlen, 
-                       rt_uint16_t               delayms, 
-                       rt_uint16_t              *readdata, 
-                       rt_uint8_t                readlen)
-{
-    /* Request */
-    rt_i2c_master_send(bus, SGP30_I2CADDR, RT_I2C_WR, cmd, cmdlen);
-
-    rt_thread_mdelay(delayms);
-
-    /* If not need reply */
-    if (readlen == 0) return RT_TRUE;
-
-    /* Response */
-    rt_uint8_t replylen = readlen * (SGP30_WORD_LEN + 1);
-    rt_uint8_t reply[replylen];
-
-    if (rt_i2c_master_recv(bus, SGP30_I2CADDR, RT_I2C_RD, reply, replylen) != replylen)
-        return RT_FALSE;
-
-    /* Generate CRC */
-    for (rt_uint8_t i = 0; i < readlen; i++) {
-        rt_uint8_t crc = generate_crc(reply + i * 3, SGP30_WORD_LEN);
-
-        if (crc != reply[i * 3 + 2])
-            return RT_FALSE;
-       
-        // success! store it
-        readdata[i] = reply[i * 3];
-        readdata[i] <<= 8;
-        readdata[i] |= reply[i * 3 + 1];
-    }
-
-    return RT_TRUE;
-}
-
-static rt_err_t _sgp30_measure(struct rt_i2c_bus_device *i2c_bus, rt_uint16_t reply[], const rt_size_t len)
+static rt_err_t _ccs811_measure(struct rt_i2c_bus_device *i2c_bus, rt_uint16_t reply[], const rt_size_t len)
 {
     RT_ASSERT(reply);
 
     if (len < 2)
         return -RT_ERROR;
 
-    rt_uint8_t cmd[2] = {0x20, 0x08};  /* Measure_air_quality */
+    rt_uint8_t cmd[1] = {CCS811_REG_ALG_RESULT_DATA};
+    rt_uint8_t buffer[8] = {0};
     
-    if (!read_word_from_command(i2c_bus, cmd, 2, 12, reply, 2))
+    if (!read_word_from_command(i2c_bus, cmd, 1, 10, buffer, 8))
         return -RT_ERROR;
+
+    reply[0] = (((rt_uint16_t)buffer[0] << 8) | (rt_uint16_t)buffer[1]);  /* eCO2 */
+    reply[1] = (((rt_uint16_t)buffer[2] << 8) | (rt_uint16_t)buffer[3]);  /* eTVOC */
 
     return RT_EOK;
 }
 
-static rt_err_t _sgp30_measure_raw(struct rt_i2c_bus_device *i2c_bus, rt_uint16_t reply[], const rt_size_t len)
+static rt_err_t _ccs811_get_baseline(struct rt_i2c_bus_device *i2c_bus, void *args)
 {
-    RT_ASSERT(reply);
+    rt_uint16_t *baseline = (rt_uint16_t *)args;
 
-    if (len < 2)
-        return -RT_ERROR;
-
-    rt_uint8_t cmd[2] = {0x20, 0x50};  /* Measure_raw_signals */
+    rt_uint8_t cmd[1] = {CCS811_REG_BASELINE};
+    rt_uint8_t reply[2];
     
-    if (!read_word_from_command(i2c_bus, cmd, 2, 25, reply, 2))
+    if (!read_word_from_command(i2c_bus, cmd, 1, 10, reply, 2))
+        return -RT_ERROR;
+
+    *baseline = reply[0] << 8 | reply[1];
+
+    return RT_EOK;
+}
+
+static rt_err_t _ccs811_set_baseline(struct rt_i2c_bus_device *i2c_bus, void *args)
+{
+    rt_uint16_t baseline = (rt_uint16_t)args;
+    rt_uint8_t cmd[3];
+
+    cmd[0] = CCS811_REG_BASELINE;
+    cmd[1] = baseline >> 8;
+    cmd[2] = baseline;
+
+    if (!read_word_from_command(i2c_bus, cmd, 3, 10, RT_NULL, 0))
         return -RT_ERROR;
 
     return RT_EOK;
 }
 
-static rt_err_t _sgp30_get_baseline(struct rt_i2c_bus_device *i2c_bus, void *args)
+static rt_err_t _ccs811_set_envdata(struct rt_i2c_bus_device *i2c_bus, void *args)
 {
-    struct sgp30_baseline *baseline = (struct sgp30_baseline *)args;
+    struct ccs811_envdata *envdata = (struct ccs811_envdata *)args;
 
-    rt_uint8_t cmd[2] = {0x20, 0x15};  /* Get_baseline */
-    rt_uint16_t reply[2];
+    rt_uint8_t cmd[5] = {0};
+    int _temp, _rh;
+
+    if (temperature > 0)
+        _temp = (int)envdata->temperature + 0.5;  // this will round off the floating point to the nearest integer value
+    else if (temperature < 0) // account for negative temperatures
+        _temp = (int)envdata->temperature - 0.5;
     
-    if (!read_word_from_command(i2c_bus, cmd, 2, 10, reply, 2))
-        return -RT_ERROR;
-
-    baseline->eco2_base = reply[0];
-    baseline->tvoc_base = reply[1];
-
-    return RT_EOK;
-}
-
-static rt_err_t _sgp30_set_baseline(struct rt_i2c_bus_device *i2c_bus, void *args)
-{
-    struct sgp30_baseline *baseline = (struct sgp30_baseline *)args;
-
-    rt_uint8_t cmd[8];
-    cmd[0] = 0x20;
-    cmd[1] = 0x1e;
-    cmd[2] = baseline->tvoc_base >> 8;
-    cmd[3] = baseline->tvoc_base & 0xFF;
-    cmd[4] = generate_crc(cmd + 2, 2);
-    cmd[5] = baseline->eco2_base >> 8;
-    cmd[6] = baseline->eco2_base & 0xFF;
-    cmd[7] = generate_crc(cmd + 5, 2);
-
-    if (!read_word_from_command(i2c_bus, cmd, 8, 10, RT_NULL, 0))
-        return -RT_ERROR;
-
-    return RT_EOK;
-}
-
-static rt_err_t _sgp30_set_humidity(struct rt_i2c_bus_device *i2c_bus, void *args)
-{
-    rt_uint32_t absolute_humidity = (rt_uint32_t)args;
-
-    if (absolute_humidity > 256000)
-        return -RT_ERROR;
-
-    rt_uint16_t ah_scaled = (rt_uint16_t)(((rt_uint64_t)absolute_humidity * 256 * 16777) >> 24);
-    rt_uint8_t cmd[5];
-    cmd[0] = 0x20;
-    cmd[1] = 0x61;
-    cmd[2] = ah_scaled >> 8;
-    cmd[3] = ah_scaled & 0xFF;
-    cmd[4] = generate_crc(cmd + 2, 2);
+    _temp = _temp + 25;  // temperature high byte is stored as T+25°C in the sensor's memory so the value of byte is positive
+    _rh = (int)envdata->humidity + 0.5;  // this will round off the floating point to the nearest integer value
+    
+    cmd[0] = CCS811_REG_ENV_DATA;
+    cmd[1] = _rh << 1;  // shift the binary number to left by 1. This is stored as a 7-bit value
+    cmd[2] = 0;  // most significant fractional bit. Using 0 here - gives us accuracy of +/-1%. Current firmware (2016) only supports fractional increments of 0.5
+    cmd[3] = _temp << 1;
+    cmd[4] = 0;
 
     if (!read_word_from_command(i2c_bus, cmd, 5, 10, RT_NULL, 0))
         return -RT_ERROR;
@@ -196,13 +107,13 @@ static rt_err_t _sgp30_set_humidity(struct rt_i2c_bus_device *i2c_bus, void *arg
     return RT_EOK;
 }
 
-static rt_size_t _sgp30_polling_get_data(struct rt_sensor_device *sensor, void *buf)
+static rt_size_t _ccs811_polling_get_data(struct rt_sensor_device *sensor, void *buf)
 {
     struct rt_sensor_data *sensor_data = buf;
     struct rt_i2c_bus_device *i2c_bus = (struct rt_i2c_bus_device *)sensor->config.intf.user_data;
 
     rt_uint16_t measure_data[2] = {0};
-    if (RT_EOK != _sgp30_measure(i2c_bus, measure_data, sizeof(measure_data)))
+    if (RT_EOK != _ccs811_measure(i2c_bus, measure_data, 2))
     {
         LOG_E("Can not read from %s", sensor->info.model);
         return 0;
@@ -252,17 +163,17 @@ static rt_size_t _sgp30_polling_get_data(struct rt_sensor_device *sensor, void *
     return 1;
 }
 
-static rt_size_t sgp30_fetch_data(struct rt_sensor_device *sensor, void *buf, rt_size_t len)
+static rt_size_t ccs811_fetch_data(struct rt_sensor_device *sensor, void *buf, rt_size_t len)
 {
     if (sensor->config.mode == RT_SENSOR_MODE_POLLING)
     {
-        return _sgp30_polling_get_data(sensor, buf);
+        return _ccs811_polling_get_data(sensor, buf);
     }
     else
         return 0;
 }
 
-static rt_err_t sgp30_control(struct rt_sensor_device *sensor, int cmd, void *args)
+static rt_err_t ccs811_control(struct rt_sensor_device *sensor, int cmd, void *args)
 {
     rt_err_t result = RT_EOK;
     struct rt_i2c_bus_device *i2c_bus = (struct rt_i2c_bus_device *)sensor->config.intf.user_data;
@@ -282,26 +193,38 @@ static rt_err_t sgp30_control(struct rt_sensor_device *sensor, int cmd, void *ar
         break;
     case RT_SENSOR_CTRL_SELF_TEST:
         break;
-    case RT_SENSOR_CTRL_GET_BASELINE:  /* Custom command : Get baseline */
+    case RT_SENSOR_CTRL_GET_BASELINE:
         LOG_D("Custom command : Get baseline");
         if (args)
         {
-            result = _sgp30_get_baseline(i2c_bus, args);
+            result = _ccs811_get_baseline(i2c_bus, args);
         }
         break;
-    case RT_SENSOR_CTRL_SET_BASELINE:  /* Custom command : Set baseline */
+    case RT_SENSOR_CTRL_SET_BASELINE:
         LOG_D("Custom command : Set baseline");
         if (args)
         {
-            result = _sgp30_set_baseline(i2c_bus, args);
+            result = _ccs811_set_baseline(i2c_bus, args);
         }
         break;
-    case RT_SENSOR_CTRL_SET_HUMIDITY:  /* Custom command : Set humidity */
-        LOG_D("Custom command : Set humidity");
+    case RT_SENSOR_CTRL_SET_ENVDATA:
+        LOG_D("Custom command : Set env data");
         if (args)
         {
-            result = _sgp30_set_humidity(i2c_bus, args);
+            result = _ccs811_set_envdata(i2c_bus, args);
         }
+        break;
+    case RT_SENSOR_CTRL_GET_MEAS_MODE:
+        LOG_D("Custom command : Get measure mode");
+        break;
+    case RT_SENSOR_CTRL_SET_MEAS_MODE:
+        LOG_D("Custom command : Set measure mode");
+        break;
+    case RT_SENSOR_CTRL_SET_MEAS_CYCLE:
+        LOG_D("Custom command : Set measure cycle");
+        break;
+    case RT_SENSOR_CTRL_SET_THRESHOLDS:
+        LOG_D("Custom command : Set thresholds");
         break;
     default:
         return -RT_ERROR;
@@ -313,64 +236,57 @@ static rt_err_t sgp30_control(struct rt_sensor_device *sensor, int cmd, void *ar
 
 static struct rt_sensor_ops sensor_ops =
 {
-    sgp30_fetch_data,
-    sgp30_control
+    ccs811_fetch_data,
+    ccs811_control
 };
 
 /*!
- *  @brief  Setups the hardware and detects a valid SGP30. Initializes I2C
+ *  @brief  Setups the hardware and detects a valid CCS811. Initializes I2C
  *          then reads the serialnumber and checks that we are talking to an
- *          SGP30. Commands the sensor to begin the IAQ algorithm. Must be 
+ *          CCS811. Commands the sensor to begin the IAQ algorithm. Must be 
  *          called after startup.
  *  @param  dev
  *          The pointer to I2C device
- *  @return RT_EOK if SGP30 found on I2C and command completed successfully, 
+ *  @return RT_EOK if CCS811 found on I2C and command completed successfully, 
  *          -RT_ERROR if something went wrong!
  */
 static rt_err_t _sensor_init(struct rt_i2c_bus_device *i2c_bus)
 {
-    rt_uint8_t cmd[2] = {0, 0};
-    rt_uint16_t serialnumber[3] = {0, 0, 0};
-    rt_uint16_t featureset;
+    rt_uint8_t cmd[5] = {0};
+    rt_uint8_t hardware_id = 0;
 
-    /* Soft Reset: Reset Command using the General Call address */
-    cmd[0] = 0x00;
-    cmd[1] = 0x06;
-    if (!read_word_from_command(i2c_bus, cmd, 2, 10, RT_NULL, 0))
+    /* Soft reset */
+    cmd[0] = CCS811_REG_SW_RESET;
+    cmd[1] = 0x11;
+    cmd[2] = 0xE5;
+    cmd[3] = 0x72;
+    cmd[4] = 0x8A;
+    if (!read_word_from_command(i2c_bus, cmd, 5, 10, RT_NULL, 0))
     {
         return -RT_ERROR;
     }
 
-    /* Get_Serial_ID */
-    cmd[0] = 0x36;
-    cmd[1] = 0x82;
-    if (!read_word_from_command(i2c_bus, cmd, 2, 10, serialnumber, 3))
-    {
+    /* Get sensor id */
+    cmd[0] = CCS811_HW_ID;
+    if (!read_word_from_command(i2c_bus, cmd, 1, 10, &hardware_id, 1))
         return -RT_ERROR;
-    }
-    LOG_D("Serial number: %02d.%02d.%02d", serialnumber[0], serialnumber[1], serialnumber[2]);
 
-    /* Get_feature_set_version */
-    cmd[0] = 0x20;
-    cmd[1] = 0x2F;
-    if (!read_word_from_command(i2c_bus, cmd, 2, 10, &featureset, 1))
+    if (hardware_id != CCS811_HW_ID)
     {
-        return -RT_ERROR;
-    }
-    LOG_D("Featureset 0x%x", featureset);
-
-    if ((featureset & 0xF0) != SGP30_FEATURESET)
-    {
+        LOG_E("sensor hardware id not 0x%x", CCS811_HW_ID);
         return -RT_ERROR;
     }
 
-    /* Init_air_quality */
-    cmd[0] = 0x20;
-    cmd[1] = 0x03;
-    if(!read_word_from_command(i2c_bus, cmd, 2, 10, RT_NULL, 0))
-    {
+    /* Start app */
+    cmd[0] = CCS811_BOOTLOADER_APP_START;
+    if (!read_word_from_command(i2c_bus, cmd, 1, 10, RT_NULL, 0))
         return -RT_ERROR;
-    }
+    
+    /* Set measurement mode */
+    //setMeasurementMode(0,0,eMode4);
+
+    /* Set env data */
+    //setInTempHum(25, 50);
 
     return RT_EOK;
 }
@@ -382,14 +298,14 @@ static rt_err_t _sensor_init(struct rt_i2c_bus_device *i2c_bus)
  *
  * @return RT_EOK
  */
-static rt_err_t _sgp30_init(struct rt_sensor_intf *intf)
+static rt_err_t _ccs811_init(struct rt_sensor_intf *intf)
 {
     if (intf->type == RT_SENSOR_INTF_I2C)
     {
         intf->user_data = (void *)rt_i2c_bus_device_find(intf->dev_name);
         if (intf->user_data == RT_NULL)
         {
-            LOG_E("Can't find sgp30 device on '%s' ", intf->dev_name);
+            LOG_E("Can't find ccs811 device on '%s' ", intf->dev_name);
             return -RT_ERROR;
         }
     }
@@ -397,21 +313,21 @@ static rt_err_t _sgp30_init(struct rt_sensor_intf *intf)
 }
 
 /**
- * Call function rt_hw_sgp30_init for initial and register a dhtxx sensor.
+ * Call function rt_hw_ccs811_init for initial and register a dhtxx sensor.
  *
  * @param name  the name will be register into device framework
  * @param cfg   sensor config
  *
  * @return the result
  */
-rt_err_t rt_hw_sgp30_init(const char *name, struct rt_sensor_config *cfg)
+rt_err_t rt_hw_ccs811_init(const char *name, struct rt_sensor_config *cfg)
 {
     int result;
     rt_sensor_t sensor_tvoc = RT_NULL;
     rt_sensor_t sensor_eco2 = RT_NULL;
     struct rt_sensor_module *module = RT_NULL;
 
-    if (_sgp30_init(&cfg->intf) != RT_EOK)
+    if (_ccs811_init(&cfg->intf) != RT_EOK)
     {
         return -RT_ERROR;
     }
@@ -430,7 +346,7 @@ rt_err_t rt_hw_sgp30_init(const char *name, struct rt_sensor_config *cfg)
 
         sensor_eco2->info.type       = RT_SENSOR_CLASS_ECO2;
         sensor_eco2->info.vendor     = RT_SENSOR_VENDOR_SENSIRION;
-        sensor_eco2->info.model      = "sgp30";
+        sensor_eco2->info.model      = "ccs811";
         sensor_eco2->info.unit       = RT_SENSOR_UNIT_ONE;
         sensor_eco2->info.intf_type  = RT_SENSOR_INTF_I2C;
         sensor_eco2->info.range_max  = SENSOR_ECO2_RANGE_MAX;
@@ -459,7 +375,7 @@ rt_err_t rt_hw_sgp30_init(const char *name, struct rt_sensor_config *cfg)
 
         sensor_tvoc->info.type       = RT_SENSOR_CLASS_TVOC;
         sensor_tvoc->info.vendor     = RT_SENSOR_VENDOR_SENSIRION;
-        sensor_tvoc->info.model      = "sgp30";
+        sensor_tvoc->info.model      = "ccs811";
         sensor_tvoc->info.unit       = RT_SENSOR_UNIT_ONE;
         sensor_tvoc->info.intf_type  = RT_SENSOR_INTF_I2C;
         sensor_tvoc->info.range_max  = SENSOR_TVOC_RANGE_MAX;

@@ -17,41 +17,22 @@
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
-/* CCS811 constants */
-#define SGP30_FEATURESET               (0x0020)  /* The required set for this library */
-#define SGP30_CRC8_POLYNOMIAL          (0x31)    /* Seed for SGP30's CRC polynomial */
-#define SGP30_CRC8_INIT                (0xFF)    /* Init value for CRC */
-#define SGP30_WORD_LEN                 (2)       /* 2 bytes per word */
 
-/* CCS811 commands */
-#define Init_air_quality               (0x2003)
-#define Measure_air_quality            (0x2008)
-#define Get_baseline                   (0x2015)
-#define Set_baseline                   (0x201e)
-#define Set_humidity                   (0x2061)
-#define Measure_test                   (0x2032)
-#define Get_feature_set_version        (0x202f)
-#define Measure_raw_signals            (0x2050)
-#define Get_Serial_ID                  (0x3682)
-
-
-/*!
- *  @brief  calculates 8-Bit checksum with given polynomial
- */
-static rt_uint8_t generate_crc(rt_uint8_t data[], rt_uint8_t datalen)
+static void write_reg(struct rt_i2c_bus_device *bus, rt_uint8_t reg, const void* pbuf, rt_size_t size)
 {
-    rt_uint8_t crc = SGP30_CRC8_INIT;
+    rt_uint8_t *_pbuf = (rt_uint8_t *)pbuf;
 
-    for (rt_uint8_t i = 0; i < datalen; i++) {
-        crc ^= data[i];
-        for (rt_uint8_t b = 0; b < 8; b++) {
-            if (crc & 0x80)
-                crc = (crc << 1) ^ SGP30_CRC8_POLYNOMIAL;
-            else
-                crc <<= 1;
-        }
-    }
-    return crc;
+    rt_i2c_master_send(bus, CCS811_I2C_ADDRESS, RT_I2C_WR, &reg, 1);
+    rt_i2c_master_send(bus, CCS811_I2C_ADDRESS, RT_I2C_WR, _pbuf, size);
+}
+
+static rt_size_t read_reg(struct rt_i2c_bus_device *bus, rt_uint8_t reg, const void* pbuf, rt_size_t size)
+{
+    rt_uint8_t *_pbuf = (rt_uint8_t *)pbuf;
+
+    rt_i2c_master_send(bus, CCS811_I2C_ADDRESS, RT_I2C_WR, &reg, 1);
+
+    return rt_i2c_master_recv(bus, CCS811_I2C_ADDRESS, RT_I2C_RD, _pbuf, size);
 }
 
 /*!
@@ -62,7 +43,7 @@ read_word_from_command(struct rt_i2c_bus_device *bus,
                        rt_uint8_t                cmd[], 
                        rt_uint8_t                cmdlen, 
                        rt_uint16_t               delayms, 
-                       rt_uint16_t              *readdata, 
+                       rt_uint8_t               *readdata, 
                        rt_uint8_t                readlen)
 {
     /* Request */
@@ -74,24 +55,8 @@ read_word_from_command(struct rt_i2c_bus_device *bus,
     if (readlen == 0) return RT_TRUE;
 
     /* Response */
-    rt_uint8_t replylen = readlen * (SGP30_WORD_LEN + 1);
-    rt_uint8_t reply[replylen];
-
-    if (rt_i2c_master_recv(bus, CCS811_I2C_ADDRESS, RT_I2C_RD, reply, replylen) != replylen)
+    if (rt_i2c_master_recv(bus, CCS811_I2C_ADDRESS, RT_I2C_RD, readdata, readlen) != readlen)
         return RT_FALSE;
-
-    /* Generate CRC */
-    for (rt_uint8_t i = 0; i < readlen; i++) {
-        rt_uint8_t crc = generate_crc(reply + i * 3, SGP30_WORD_LEN);
-
-        if (crc != reply[i * 3 + 2])
-            return RT_FALSE;
-       
-        // success! store it
-        readdata[i] = reply[i * 3];
-        readdata[i] <<= 8;
-        readdata[i] |= reply[i * 3 + 1];
-    }
 
     return RT_TRUE;
 }
@@ -111,51 +76,139 @@ rt_bool_t ccs811_check_ready(ccs811_device_t dev)
         return RT_TRUE;
 }
 
+rt_bool_t ccs811_set_measure_cycle(ccs811_device_t dev, ccs811_cycle_t cycle)
+{
+    RT_ASSERT(dev);
+
+    rt_uint8_t cmd[2] = {0};
+    rt_uint8_t measurement = cycle << 4;
+
+    cmd[0] = CCS811_REG_MEAS_MODE;
+    cmd[1] = measurement;
+
+    return read_word_from_command(dev->i2c, cmd, 2, 10, RT_NULL, 0);
+}
+
+rt_bool_t ccs811_set_measure_mode(ccs811_device_t dev, rt_uint8_t thresh, rt_uint8_t interrupt, ccs811_mode_t mode)
+{
+    RT_ASSERT(dev);
+
+    rt_uint8_t cmd[2] = {0};
+    rt_uint8_t measurement = (thresh << 2) | (interrupt << 3) | (mode << 4);
+
+    cmd[0] = CCS811_REG_MEAS_MODE;
+    cmd[1] = measurement;
+
+    return read_word_from_command(dev->i2c, cmd, 2, 10, RT_NULL, 0);
+}
+
+rt_uint8_t ccs811_get_measure_mode(ccs811_device_t dev)
+{
+    RT_ASSERT(dev);
+
+    rt_uint8_t cmd[1] = {0};
+    rt_uint8_t measurement = 0;
+
+    cmd[0] = CCS811_REG_MEAS_MODE;
+
+    read_word_from_command(dev->i2c, cmd, 1, 10, &measurement, 1);
+    return measurement;
+}
+
+rt_bool_t  ccs811_set_thresholds(ccs811_device_t dev, rt_uint16_t low_to_med, rt_uint16_t med_to_high)
+{
+    RT_ASSERT(dev);
+
+    rt_uint8_t cmd[5] = {0};
+
+    cmd[0] = CCS811_REG_THRESHOLDS;
+    cmd[1] = (rt_uint8_t)((low_to_med >> 8) & 0xF);
+    cmd[2] = (rt_uint8_t)(low_to_med & 0xF);
+    cmd[3] = (rt_uint8_t)((med_to_high >> 8) & 0xF);
+    cmd[4] = (rt_uint8_t)(med_to_high & 0xF);
+
+    return read_word_from_command(dev->i2c, cmd, 5, 10, RT_NULL, 0);
+}
+
+rt_uint16_t ccs811_get_co2_ppm(ccs811_device_t dev)
+{
+    RT_ASSERT(dev);
+
+    rt_uint8_t cmd[1] = {CCS811_REG_ALG_RESULT_DATA};
+    rt_uint8_t buffer[8] = {0};
+
+    read_word_from_command(dev->i2c, cmd, 1, 10, buffer, 8);
+    dev->eCO2 = (((rt_uint16_t)buffer[0] << 8) | (rt_uint16_t)buffer[1]);
+    return dev->eCO2;
+}
+
+rt_uint16_t ccs811_get_tvoc_ppb(ccs811_device_t dev)
+{
+    RT_ASSERT(dev);
+
+    rt_uint8_t cmd[1] = {CCS811_REG_ALG_RESULT_DATA};
+    rt_uint8_t buffer[8] = {0};
+
+    read_word_from_command(dev->i2c, cmd, 1, 10, buffer, 8);
+    dev->eTVOC = (((rt_uint16_t)buffer[2] << 8) | (rt_uint16_t)buffer[3]);
+    return dev->eTVOC;
+}
+
 /*!
  *  @brief  Commands the sensor to take a single eCO2/VOC measurement. Places
  *          results in {@link TVOC} and {@link eCO2}
  *  @return True if command completed successfully, false if something went
  *          wrong!
  */
-rt_bool_t sgp30_measure(sgp30_device_t dev)
+rt_bool_t ccs811_measure(ccs811_device_t dev)
 {
-	RT_ASSERT(dev);
+    RT_ASSERT(dev);
 
-    rt_uint8_t  cmd[2];
-    rt_uint16_t reply[2];
+    rt_uint8_t cmd[1] = {CCS811_REG_ALG_RESULT_DATA};
+    rt_uint8_t buffer[8] = {0};
 
-    cmd[0] = 0x20;  /* Measure_air_quality */
-    cmd[1] = 0x08;
-    
-    if (!read_word_from_command(dev->i2c, cmd, 2, 12, reply, 2))
+    if (!read_word_from_command(dev->i2c, cmd, 1, 10, buffer, 8))
         return RT_FALSE;
-
-    dev->eCO2 = reply[0];
-    dev->TVOC = reply[1];
+    
+    dev->eCO2 = (((rt_uint16_t)buffer[0] << 8) | (rt_uint16_t)buffer[1]);
+    dev->eTVOC = (((rt_uint16_t)buffer[2] << 8) | (rt_uint16_t)buffer[3]);
 
     return RT_TRUE;
 }
 
- /*!
-  *  @brief  Commands the sensor to take a single H2/ethanol raw measurement. Places results in {@link rawH2} and {@link rawEthanol}
-  *  @returns True if command completed successfully, false if something went wrong!
-  */
-rt_bool_t sgp30_measure_raw(sgp30_device_t dev)
+/*!
+ *  @brief  Set the absolute humidity value [mg/m^3] for compensation to increase
+ *          precision of TVOC and eCO2.
+ *  @param  absolute_humidity 
+ *          A uint32_t [mg/m^3] which we will be used for compensation.
+ *          If the absolute humidity is set to zero, humidity compensation
+ *          will be disabled.
+ *  @return True if command completed successfully, false if something went
+ *          wrong!
+ */
+rt_bool_t ccs811_set_envdata(ccs811_device_t dev, float temperature, float humidity)
 {
-	RT_ASSERT(dev);
+    RT_ASSERT(dev);
 
-    rt_uint8_t  cmd[2];
-    rt_uint16_t reply[2];
+    rt_uint8_t cmd[5] = {0};
+    int _temp, _rh;
 
-    cmd[0] = 0x20;  /* Measure_raw_signals */
-    cmd[1] = 0x50;
+    if (temperature > 0)
+        _temp = (int)temperature + 0.5;  // this will round off the floating point to the nearest integer value
+    else if (temperature < 0) // account for negative temperatures
+        _temp = (int)temperature - 0.5;
     
-    if (!read_word_from_command(dev->i2c, cmd, 2, 25, reply, 2))
+    _temp = _temp + 25;  // temperature high byte is stored as T+25°C in the sensor's memory so the value of byte is positive
+    _rh = (int)humidity + 0.5;  // this will round off the floating point to the nearest integer value
+    
+    cmd[0] = CCS811_REG_ENV_DATA;
+    cmd[1] = _rh << 1;  // shift the binary number to left by 1. This is stored as a 7-bit value
+    cmd[2] = 0;  // most significant fractional bit. Using 0 here - gives us accuracy of +/-1%. Current firmware (2016) only supports fractional increments of 0.5
+    cmd[3] = _temp << 1;
+    cmd[4] = 0;
+
+    if (!read_word_from_command(dev->i2c, cmd, 5, 10, RT_NULL, 0))
         return RT_FALSE;
-
-    dev->rawH2      = reply[0];
-    dev->rawEthanol = reply[1];
-
     return RT_TRUE;
 }
 
@@ -206,47 +259,16 @@ rt_bool_t ccs811_set_baseline(ccs811_device_t dev, rt_uint16_t baseline);
 }
 
 /*!
- *  @brief  Set the absolute humidity value [mg/m^3] for compensation to increase
- *          precision of TVOC and eCO2.
- *  @param  absolute_humidity 
- *          A uint32_t [mg/m^3] which we will be used for compensation.
- *          If the absolute humidity is set to zero, humidity compensation
- *          will be disabled.
- *  @return True if command completed successfully, false if something went
- *          wrong!
- */
-rt_bool_t 
-sgp30_set_humidity(sgp30_device_t dev, rt_uint32_t absolute_humidity)
-{
-	RT_ASSERT(dev);
-
-    if (absolute_humidity > 256000) {
-        return RT_FALSE;
-    }
-
-    rt_uint16_t ah_scaled = (rt_uint16_t)(((rt_uint64_t)absolute_humidity * 256 * 16777) >> 24);
-    rt_uint8_t cmd[5];
-    cmd[0] = 0x20;
-    cmd[1] = 0x61;
-    cmd[2] = ah_scaled >> 8;
-    cmd[3] = ah_scaled & 0xFF;
-    cmd[4] = generate_crc(cmd + 2, 2);
-
-  return read_word_from_command(dev->i2c, cmd, 5, 10, RT_NULL, 0);
-
-}
-
-/*!
- *  @brief  Setups the hardware and detects a valid SGP30. Initializes I2C
+ *  @brief  Setups the hardware and detects a valid CCS811. Initializes I2C
  *          then reads the serialnumber and checks that we are talking to an
- *          SGP30. Commands the sensor to begin the IAQ algorithm. Must be 
+ *          CCS811. Commands the sensor to begin the IAQ algorithm. Must be 
  *          called after startup.
  *  @param  dev
  *          The pointer to I2C device
- *  @return RT_EOK if SGP30 found on I2C and command completed successfully, 
+ *  @return RT_EOK if CCS811 found on I2C and command completed successfully, 
  *          -RT_ERROR if something went wrong!
  */
-static rt_err_t sensor_init(sgp30_device_t dev)
+static rt_err_t sensor_init(ccs811_device_t dev)
 {
     rt_uint8_t cmd[5] = {0};
     rt_uint8_t hardware_id = 0;
@@ -285,7 +307,7 @@ static rt_err_t sensor_init(sgp30_device_t dev)
     return RT_EOK;
 }
 
-rt_err_t ccs811_init(struct sgp30_device *dev, const char *i2c_bus_name)
+rt_err_t ccs811_init(struct ccs811_device *dev, const char *i2c_bus_name)
 {
     RT_ASSERT(i2c_bus_name);
 
@@ -294,14 +316,14 @@ rt_err_t ccs811_init(struct sgp30_device *dev, const char *i2c_bus_name)
     dev->i2c = rt_i2c_bus_device_find(i2c_bus_name);
     if (dev->i2c == RT_NULL)
     {
-        LOG_E("Can't find sgp30 device on '%s' ", i2c_bus_name);
+        LOG_E("Can't find ccs811 device on '%s' ", i2c_bus_name);
         return -RT_ERROR;
     }
 
-    dev->lock = rt_mutex_create("mutex_sgp30", RT_IPC_FLAG_FIFO);
+    dev->lock = rt_mutex_create("mutex_ccs811", RT_IPC_FLAG_FIFO);
     if (dev->lock == RT_NULL)
     {
-        LOG_E("Can't create mutex for sgp30 device on '%s' ", i2c_bus_name);
+        LOG_E("Can't create mutex for ccs811 device on '%s' ", i2c_bus_name);
         return -RT_ERROR;
     }
 
@@ -319,10 +341,10 @@ ccs811_device_t ccs811_create(const char *i2c_bus_name)
 {
     RT_ASSERT(i2c_bus_name);
 
-    sgp30_device_t dev = rt_calloc(1, sizeof(struct sgp30_device));
+    ccs811_device_t dev = rt_calloc(1, sizeof(struct ccs811_device));
     if (dev == RT_NULL)
     {
-        LOG_E("Can't allocate memory for sgp30 device on '%s' ", i2c_bus_name);
+        LOG_E("Can't allocate memory for ccs811 device on '%s' ", i2c_bus_name);
         return RT_NULL;
     }
 
@@ -331,15 +353,15 @@ ccs811_device_t ccs811_create(const char *i2c_bus_name)
     dev->i2c = rt_i2c_bus_device_find(i2c_bus_name);
     if (dev->i2c == RT_NULL)
     {
-        LOG_E("Can't find sgp30 device on '%s' ", i2c_bus_name);
+        LOG_E("Can't find ccs811 device on '%s' ", i2c_bus_name);
         rt_free(dev);
         return RT_NULL;
     }
 
-    dev->lock = rt_mutex_create("mutex_sgp30", RT_IPC_FLAG_FIFO);
+    dev->lock = rt_mutex_create("mutex_ccs811", RT_IPC_FLAG_FIFO);
     if (dev->lock == RT_NULL)
     {
-        LOG_E("Can't create mutex for sgp30 device on '%s' ", i2c_bus_name);
+        LOG_E("Can't create mutex for ccs811 device on '%s' ", i2c_bus_name);
         rt_free(dev);
         return RT_NULL;
     }
