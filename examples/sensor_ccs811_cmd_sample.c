@@ -13,12 +13,12 @@
 #include <board.h>
 #include "ccs811.h"
 
-static void cat_sgp30_tvoc(void)
+static void cat_ccs811_tvoc(void)
 {
     rt_device_t tvoc_dev = RT_NULL;
     struct rt_sensor_data sensor_data;
 
-    tvoc_dev = rt_device_find("tvoc_sg3");
+    tvoc_dev = rt_device_find("tvoc_cs8");
     if (!tvoc_dev)
     {
         rt_kprintf("Can't find TVOC device.\n");
@@ -40,12 +40,12 @@ static void cat_sgp30_tvoc(void)
     rt_device_close(tvoc_dev);
 }
 
-static void cat_sgp30_eco2(void)
+static void cat_ccs811_eco2(void)
 {
     rt_device_t eco2_dev = RT_NULL;
     struct rt_sensor_data sensor_data;
 
-    eco2_dev = rt_device_find("eco2_sg3");
+    eco2_dev = rt_device_find("eco2_cs8");
     if (!eco2_dev) 
     {
         rt_kprintf("Can't find eCO2 device.\n");
@@ -67,34 +67,34 @@ static void cat_sgp30_eco2(void)
     rt_device_close(eco2_dev);
 }
 
-static void cat_sgp30_baseline(void)
+static void cat_ccs811_baseline(void)
 {
-    rt_device_t sgp30_dev = RT_NULL;
-    struct sgp30_baseline baseline;
+    rt_device_t ccs811_dev = RT_NULL;
+    struct ccs811_baseline baseline;
 
-    sgp30_dev = rt_device_find("tvoc_sg3");
-    if (!sgp30_dev) 
+    ccs811_dev = rt_device_find("tvoc_cs8");
+    if (!ccs811_dev) 
     {
         rt_kprintf("Can't find eCO2 device.\n");
         return;
     }
 
-    if (rt_device_open(sgp30_dev, RT_DEVICE_FLAG_RDWR)) 
+    if (rt_device_open(ccs811_dev, RT_DEVICE_FLAG_RDWR)) 
     {
         rt_kprintf("Open eCO2 device failed.\n");
         return;
     }
 
-    if (RT_EOK != rt_device_control(sgp30_dev, RT_SENSOR_CTRL_GET_BASELINE, &baseline)) 
+    if (RT_EOK != rt_device_control(ccs811_dev, RT_SENSOR_CTRL_GET_BASELINE, &baseline)) 
     {
         rt_kprintf("Get baseline failed.\n");
     }
     rt_kprintf("eCO2 baseline: %d, TVOC baseline: %d\n", baseline.eco2_base, baseline.tvoc_base);
 
-    rt_device_close(sgp30_dev);
+    rt_device_close(ccs811_dev);
 }
 #ifdef FINSH_USING_MSH
-MSH_CMD_EXPORT(cat_sgp30_tvoc, read sgp30 TVOC data);
-MSH_CMD_EXPORT(cat_sgp30_eco2, read sgp30 eCO2 data);
-MSH_CMD_EXPORT(cat_sgp30_baseline, read sgp30 TVOC and eCO2 baseline);
+MSH_CMD_EXPORT(cat_ccs811_tvoc, read ccs811 TVOC data);
+MSH_CMD_EXPORT(cat_ccs811_eco2, read ccs811 eCO2 data);
+MSH_CMD_EXPORT(cat_ccs811_baseline, read ccs811 TVOC and eCO2 baseline);
 #endif

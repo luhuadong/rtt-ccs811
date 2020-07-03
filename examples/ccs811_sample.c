@@ -13,50 +13,37 @@
 #include <board.h>
 #include "ccs811.h"
 
-#define SGP30_I2C_BUS_NAME       "i2c1"
+#define CCS811_I2C_BUS_NAME       "i2c1"
 
-/* cat_sgp30 */
-static void cat_sgp30(void)
+/* cat_ccs811 */
+static void cat_ccs811(void)
 {
-    sgp30_device_t sgp30 = sgp30_create(SGP30_I2C_BUS_NAME);
+    ccs811_device_t ccs811 = ccs811_create(CCS811_I2C_BUS_NAME);
 
-    if(!sgp30) 
+    if(!ccs811) 
     {
-        rt_kprintf("(SGP30) Init failed\n");
+        rt_kprintf("(CCS811) Init failed\n");
         return;
     }
 
-    rt_kprintf("(SGP30) Serial number: %x.%x.%x\n", sgp30->serialnumber[0], 
-               sgp30->serialnumber[1], sgp30->serialnumber[2]);
-
-    rt_uint16_t loop = 20;
+    rt_uint16_t loop = 10;
 
     while(loop--)
     {
         /* Read TVOC and eCO2 */
-        if(!sgp30_measure(sgp30)) 
+        if(!ccs811_measure(ccs811)) 
         {
-            rt_kprintf("(SGP30) Measurement failed\n");
-            sgp30_delete(sgp30);
+            rt_kprintf("(CCS811) Measurement failed\n");
+            ccs811_delete(ccs811);
             break;
         }
 
-        /* Read rawH2 and rawEthanol */
-        if(!sgp30_measure_raw(sgp30)) 
-        {
-            rt_kprintf("(SGP30) Raw Measurement failed\n");
-            sgp30_delete(sgp30);
-            break;
-        }
-
-        rt_kprintf("[%2u] TVOC: %d ppb, eCO2: %d ppm; Raw H2: %d, Raw Ethanol: %d\n", 
-                   loop, sgp30->TVOC, sgp30->eCO2, sgp30->rawH2, sgp30->rawEthanol);
-
-        rt_thread_mdelay(1500);
+        rt_kprintf("[%2u] TVOC: %d ppb, eCO2: %d ppm\n", loop, ccs811->eTVOC, ccs811->eCO2);
+        rt_thread_mdelay(2000);
     }
     
-    sgp30_delete(sgp30);
+    ccs811_delete(ccs811);
 }
 #ifdef FINSH_USING_MSH
-MSH_CMD_EXPORT(cat_sgp30, read sgp30 TVOC and eCO2);
+MSH_CMD_EXPORT(cat_ccs811, read ccs811 TVOC and eCO2);
 #endif

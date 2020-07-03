@@ -246,7 +246,7 @@ rt_uint16_t ccs811_get_baseline(ccs811_device_t dev)
  *  @return True if command completed successfully, false if something went
  *          wrong!
  */
-rt_bool_t ccs811_set_baseline(ccs811_device_t dev, rt_uint16_t baseline);
+rt_bool_t ccs811_set_baseline(ccs811_device_t dev, rt_uint16_t baseline)
 {
 	RT_ASSERT(dev);
 
