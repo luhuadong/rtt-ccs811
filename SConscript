@@ -7,7 +7,7 @@ cwd   = GetCurrentDir()
 # add ccs811 src files.
 if GetDepend('PKG_USING_CCS811'):
     src += Glob('src/ccs811.c')
-    src += Glob('src/sensor_sensirion_ccs811.c')
+    src += Glob('src/sensor_ams_ccs811.c')
 
 if GetDepend('PKG_USING_CCS811_SAMPLE'):
     src += Glob('examples/ccs811_sample.c')

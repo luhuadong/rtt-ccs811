@@ -31,6 +31,29 @@
 #define SENSOR_ECO2_FIFO_MAX           SENSOR_FIFO_MAX
 #define SENSOR_TVOC_FIFO_MAX           SENSOR_FIFO_MAX
 
+static rt_bool_t 
+read_word_from_command(struct rt_i2c_bus_device *bus,
+                       rt_uint8_t                cmd[], 
+                       rt_uint8_t                cmdlen, 
+                       rt_uint16_t               delayms, 
+                       rt_uint8_t               *readdata, 
+                       rt_uint8_t                readlen)
+{
+    /* Request */
+    rt_i2c_master_send(bus, CCS811_I2C_ADDRESS, RT_I2C_WR, cmd, cmdlen);
+
+    rt_thread_mdelay(delayms);
+
+    /* If not need reply */
+    if (readlen == 0) return RT_TRUE;
+
+    /* Response */
+    if (rt_i2c_master_recv(bus, CCS811_I2C_ADDRESS, RT_I2C_RD, readdata, readlen) != readlen)
+        return RT_FALSE;
+
+    return RT_TRUE;
+}
+
 static rt_err_t _ccs811_measure(struct rt_i2c_bus_device *i2c_bus, rt_uint16_t reply[], const rt_size_t len)
 {
     RT_ASSERT(reply);
@@ -87,9 +110,9 @@ static rt_err_t _ccs811_set_envdata(struct rt_i2c_bus_device *i2c_bus, void *arg
     rt_uint8_t cmd[5] = {0};
     int _temp, _rh;
 
-    if (temperature > 0)
+    if (envdata->temperature > 0)
         _temp = (int)envdata->temperature + 0.5;  // this will round off the floating point to the nearest integer value
-    else if (temperature < 0) // account for negative temperatures
+    else if (envdata->temperature < 0) // account for negative temperatures
         _temp = (int)envdata->temperature - 0.5;
     
     _temp = _temp + 25;  // temperature high byte is stored as T+25°C in the sensor's memory so the value of byte is positive
