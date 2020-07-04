@@ -113,7 +113,9 @@ rt_uint8_t ccs811_get_measure_mode(ccs811_device_t dev)
 
     cmd[0] = CCS811_REG_MEAS_MODE;
 
-    read_word_from_command(dev->i2c, cmd, 1, 10, &measurement, 1);
+    if (!read_word_from_command(dev->i2c, cmd, 1, 10, &measurement, 1))
+        return 0xFF;
+
     return measurement;
 }
 
@@ -233,7 +235,7 @@ rt_uint16_t ccs811_get_baseline(ccs811_device_t dev)
     rt_uint8_t reply[2];
     
     if (!read_word_from_command(dev->i2c, cmd, 1, 10, reply, 2))
-        return RT_FALSE;
+        return 0;
 
     return reply[0] << 8 | reply[1];
 }

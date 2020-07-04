@@ -70,7 +70,7 @@ typedef enum
     CCS811_MODE_1,      /* Constant power mode, IAQ measurement every second */
     CCS811_MODE_2,      /* Pulse heating mode IAQ measurement every 10 seconds */
     CCS811_MODE_3,      /* Low power pulse heating mode IAQ measurement every 60 seconds */
-    CCS811_MODE_4       /* Constant power mode, sensor measurement every 250ms 1xx: Reserved modes (For future use) */
+    CCS811_MODE_4       /* Constant power mode, sensor measurement every 250ms */
 
 } ccs811_mode_t;
 
