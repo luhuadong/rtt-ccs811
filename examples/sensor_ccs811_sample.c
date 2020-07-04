@@ -33,7 +33,8 @@ static void read_tvoc_entry(void *args)
         return;
     }
 
-    while (1)
+    rt_uint16_t loop = 20;
+    while (loop--)
     {
         if (1 != rt_device_read(tvoc_dev, 0, &sensor_data, 1))
         {
@@ -42,7 +43,7 @@ static void read_tvoc_entry(void *args)
         }
         rt_kprintf("[%d] TVOC: %d\n", sensor_data.timestamp, sensor_data.data.tvoc);
 
-        rt_thread_mdelay(2000);
+        rt_thread_mdelay(1000);
     }
 
     rt_device_close(tvoc_dev);
@@ -66,7 +67,8 @@ static void read_eco2_entry(void *args)
         return;
     }
 
-    while(1)
+    rt_uint16_t loop = 20;
+    while (loop--)
     {
         if (1 != rt_device_read(eco2_dev, 0, &sensor_data, 1))
         {
@@ -75,7 +77,7 @@ static void read_eco2_entry(void *args)
         }
         rt_kprintf("[%d] eCO2: %d\n", sensor_data.timestamp, sensor_data.data.eco2);
 
-        rt_thread_mdelay(2000);
+        rt_thread_mdelay(1000);
     }
 
     rt_device_close(eco2_dev);
@@ -93,15 +95,16 @@ static int ccs811_read_sample(void)
     eco2_thread = rt_thread_create("eco2_th", read_eco2_entry, 
                                    "eco2_cs8", 1024, 
                                     RT_THREAD_PRIORITY_MAX / 2, 20);
-#if 0
+
     if (tvoc_thread) 
         rt_thread_startup(tvoc_thread);
 
     if (eco2_thread) 
         rt_thread_startup(eco2_thread);
-#endif
 }
-INIT_APP_EXPORT(ccs811_read_sample);
+#ifdef FINSH_USING_MSH
+MSH_CMD_EXPORT(ccs811_read_sample, read ccs811 TVOC and eCO2);
+#endif
 
 static int rt_hw_ccs811_port(void)
 {
