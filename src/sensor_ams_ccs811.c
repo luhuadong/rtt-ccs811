@@ -68,7 +68,7 @@ static rt_err_t _ccs811_measure(struct rt_i2c_bus_device *i2c_bus, rt_uint16_t r
         return -RT_ERROR;
 
     reply[0] = (((rt_uint16_t)buffer[0] << 8) | (rt_uint16_t)buffer[1]);  /* eCO2 */
-    reply[1] = (((rt_uint16_t)buffer[2] << 8) | (rt_uint16_t)buffer[3]);  /* eTVOC */
+    reply[1] = (((rt_uint16_t)buffer[2] << 8) | (rt_uint16_t)buffer[3]);  /* TVOC */
 
     return RT_EOK;
 }

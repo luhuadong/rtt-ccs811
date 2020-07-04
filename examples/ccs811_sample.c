@@ -41,7 +41,7 @@ static void cat_ccs811(void)
                 ccs811_delete(ccs811);
                 break;
             }
-            rt_kprintf("[%2u] TVOC: %d ppb, eCO2: %d ppm\n", loop--, ccs811->eTVOC, ccs811->eCO2);
+            rt_kprintf("[%2u] TVOC: %d ppb, eCO2: %d ppm\n", loop--, ccs811->TVOC, ccs811->eCO2);
 
             if (loop % 5 == 0)
                 rt_kprintf("==> baseline: 0x%x\n", ccs811_get_baseline(ccs811));

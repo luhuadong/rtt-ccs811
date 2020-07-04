@@ -154,8 +154,8 @@ rt_uint16_t ccs811_get_tvoc_ppb(ccs811_device_t dev)
     rt_uint8_t buffer[8] = {0};
 
     read_word_from_command(dev->i2c, cmd, 1, 10, buffer, 8);
-    dev->eTVOC = (((rt_uint16_t)buffer[2] << 8) | (rt_uint16_t)buffer[3]);
-    return dev->eTVOC;
+    dev->TVOC = (((rt_uint16_t)buffer[2] << 8) | (rt_uint16_t)buffer[3]);
+    return dev->TVOC;
 }
 
 /*!
@@ -175,7 +175,7 @@ rt_bool_t ccs811_measure(ccs811_device_t dev)
         return RT_FALSE;
     
     dev->eCO2 = (((rt_uint16_t)buffer[0] << 8) | (rt_uint16_t)buffer[1]);
-    dev->eTVOC = (((rt_uint16_t)buffer[2] << 8) | (rt_uint16_t)buffer[3]);
+    dev->TVOC = (((rt_uint16_t)buffer[2] << 8) | (rt_uint16_t)buffer[3]);
 
     return RT_TRUE;
 }

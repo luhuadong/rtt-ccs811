@@ -97,7 +97,7 @@ struct ccs811_device
 {
 	struct rt_i2c_bus_device *i2c;
 
-	rt_uint16_t eTVOC;
+	rt_uint16_t TVOC;
 	rt_uint16_t eCO2;
 
 	rt_bool_t   is_ready;
