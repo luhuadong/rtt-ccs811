@@ -49,10 +49,12 @@ read_word_from_command(struct rt_i2c_bus_device *bus,
     /* Request */
     rt_i2c_master_send(bus, CCS811_I2C_ADDRESS, RT_I2C_WR, cmd, cmdlen);
 
-    rt_thread_mdelay(delayms);
+    if (delayms > 0)
+        rt_thread_mdelay(delayms);
 
     /* If not need reply */
-    if (readlen == 0) return RT_TRUE;
+    if (readlen == 0)
+        return RT_TRUE;
 
     /* Response */
     if (rt_i2c_master_recv(bus, CCS811_I2C_ADDRESS, RT_I2C_RD, readdata, readlen) != readlen)
@@ -279,19 +281,21 @@ static rt_err_t sensor_init(ccs811_device_t dev)
     cmd[2] = 0xE5;
     cmd[3] = 0x72;
     cmd[4] = 0x8A;
-    if (!read_word_from_command(dev->i2c, cmd, 5, 10, RT_NULL, 0))
+    if (!read_word_from_command(dev->i2c, cmd, 5, 100, RT_NULL, 0))
         return -RT_ERROR;
     
     /* Get sensor id */
-    cmd[0] = CCS811_HW_ID;
-    if (!read_word_from_command(dev->i2c, cmd, 1, 10, &hardware_id, 1))
+    cmd[0] = CCS811_REG_HW_ID;
+    if (!read_word_from_command(dev->i2c, cmd, 1, 0, &hardware_id, 1))
         return -RT_ERROR;
 
     if (hardware_id != CCS811_HW_ID)
     {
-        LOG_E("sensor hardware id not 0x%x", CCS811_HW_ID);
+        LOG_E("sensor hardware id not 0x%x (0x%02x)", CCS811_HW_ID, hardware_id);
         return -RT_ERROR;
     }
+
+    rt_thread_mdelay(20);
 
     /* Start app */
     cmd[0] = CCS811_BOOTLOADER_APP_START;
@@ -299,10 +303,10 @@ static rt_err_t sensor_init(ccs811_device_t dev)
         return -RT_ERROR;
     
     /* Set measurement mode */
-    //setMeasurementMode(0,0,eMode4);
+    ccs811_set_measure_mode(dev, 0, 0, CCS811_MODE_4);
 
     /* Set env data */
-    //setInTempHum(25, 50);
+    ccs811_set_envdata(dev, 25, 50);
 
     return RT_EOK;
 }
@@ -320,7 +324,7 @@ rt_err_t ccs811_init(struct ccs811_device *dev, const char *i2c_bus_name)
         return -RT_ERROR;
     }
 
-    dev->lock = rt_mutex_create("mutex_ccs811", RT_IPC_FLAG_FIFO);
+    dev->lock = rt_mutex_create("ccs811", RT_IPC_FLAG_FIFO);
     if (dev->lock == RT_NULL)
     {
         LOG_E("Can't create mutex for ccs811 device on '%s' ", i2c_bus_name);
@@ -358,7 +362,7 @@ ccs811_device_t ccs811_create(const char *i2c_bus_name)
         return RT_NULL;
     }
 
-    dev->lock = rt_mutex_create("mutex_ccs811", RT_IPC_FLAG_FIFO);
+    dev->lock = rt_mutex_create("ccs811", RT_IPC_FLAG_FIFO);
     if (dev->lock == RT_NULL)
     {
         LOG_E("Can't create mutex for ccs811 device on '%s' ", i2c_bus_name);

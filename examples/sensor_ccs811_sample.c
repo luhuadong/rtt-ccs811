@@ -93,13 +93,13 @@ static int ccs811_read_sample(void)
     eco2_thread = rt_thread_create("eco2_th", read_eco2_entry, 
                                    "eco2_cs8", 1024, 
                                     RT_THREAD_PRIORITY_MAX / 2, 20);
-    
+#if 0
     if (tvoc_thread) 
         rt_thread_startup(tvoc_thread);
 
     if (eco2_thread) 
         rt_thread_startup(eco2_thread);
-
+#endif
 }
 INIT_APP_EXPORT(ccs811_read_sample);
 

@@ -22,7 +22,7 @@
 #define SENSOR_TVOC_RANGE_MAX          (32768)
 
 /* minial period (ms) */
-#define SENSOR_PERIOD_MIN              (0)
+#define SENSOR_PERIOD_MIN              (250)
 #define SENSOR_ECO2_PERIOD_MIN         SENSOR_PERIOD_MIN
 #define SENSOR_TVOC_PERIOD_MIN         SENSOR_PERIOD_MIN
 
@@ -90,12 +90,12 @@ static rt_err_t _ccs811_get_baseline(struct rt_i2c_bus_device *i2c_bus, void *ar
 
 static rt_err_t _ccs811_set_baseline(struct rt_i2c_bus_device *i2c_bus, void *args)
 {
-    rt_uint16_t baseline = (rt_uint16_t)args;
+    rt_uint16_t *baseline = (rt_uint16_t *)args;
     rt_uint8_t cmd[3];
 
     cmd[0] = CCS811_REG_BASELINE;
-    cmd[1] = baseline >> 8;
-    cmd[2] = baseline;
+    cmd[1] = *baseline >> 8;
+    cmd[2] = *baseline;
 
     if (!read_word_from_command(i2c_bus, cmd, 3, 10, RT_NULL, 0))
         return -RT_ERROR;
@@ -123,6 +123,69 @@ static rt_err_t _ccs811_set_envdata(struct rt_i2c_bus_device *i2c_bus, void *arg
     cmd[2] = 0;  // most significant fractional bit. Using 0 here - gives us accuracy of +/-1%. Current firmware (2016) only supports fractional increments of 0.5
     cmd[3] = _temp << 1;
     cmd[4] = 0;
+
+    if (!read_word_from_command(i2c_bus, cmd, 5, 10, RT_NULL, 0))
+        return -RT_ERROR;
+
+    return RT_EOK;
+}
+
+static rt_err_t _ccs811_set_measure_cycle(struct rt_i2c_bus_device *i2c_bus, void *args)
+{
+    ccs811_cycle_t *cycle = (ccs811_cycle_t *)args;
+    rt_uint8_t cmd[2] = {0};
+
+    cmd[0] = CCS811_REG_MEAS_MODE;
+    cmd[1] = *cycle << 4;
+
+    if (!read_word_from_command(i2c_bus, cmd, 2, 10, RT_NULL, 0))
+        return -RT_ERROR;
+
+    return RT_EOK;
+}
+
+static rt_err_t _ccs811_set_measure_mode(struct rt_i2c_bus_device *i2c_bus, void *args)
+{
+    struct ccs811_meas_mode *meas = (struct ccs811_meas_mode *)args;
+    rt_uint8_t cmd[2] = {0};
+
+    cmd[0] = CCS811_REG_MEAS_MODE;
+    cmd[1] = (meas->thresh << 2) | (meas->interrupt << 3) | (meas->mode << 4);
+
+    if (!read_word_from_command(i2c_bus, cmd, 2, 10, RT_NULL, 0))
+        return -RT_ERROR;
+
+    return RT_EOK;
+}
+
+static rt_err_t _ccs811_get_measure_mode(struct rt_i2c_bus_device *i2c_bus, void *args)
+{
+    struct ccs811_meas_mode *meas = (struct ccs811_meas_mode *)args;
+    rt_uint8_t cmd[1] = {0};
+    rt_uint8_t measurement = 0;
+
+    cmd[0] = CCS811_REG_MEAS_MODE;
+
+    if (!read_word_from_command(i2c_bus, cmd, 1, 0, &measurement, 1))
+        return -RT_ERROR;
+
+    meas->thresh = (measurement & 0x04) >> 2;
+    meas->thresh = (measurement & 0x08) >> 3;
+    meas->thresh = (measurement & 0x70) >> 4;
+
+    return RT_EOK;
+}
+
+static rt_err_t _ccs811_set_thresholds(struct rt_i2c_bus_device *i2c_bus, void *args)
+{
+    struct ccs811_thresholds *thresholds = (struct ccs811_thresholds *)args;
+    rt_uint8_t cmd[5] = {0};
+
+    cmd[0] = CCS811_REG_THRESHOLDS;
+    cmd[1] = (rt_uint8_t)((thresholds->low_to_med >> 8) & 0xF);
+    cmd[2] = (rt_uint8_t)( thresholds->low_to_med & 0xF);
+    cmd[3] = (rt_uint8_t)((thresholds->med_to_high >> 8) & 0xF);
+    cmd[4] = (rt_uint8_t)( thresholds->med_to_high & 0xF);
 
     if (!read_word_from_command(i2c_bus, cmd, 5, 10, RT_NULL, 0))
         return -RT_ERROR;
@@ -204,6 +267,12 @@ static rt_err_t ccs811_control(struct rt_sensor_device *sensor, int cmd, void *a
     switch (cmd)
     {
     case RT_SENSOR_CTRL_GET_ID:
+        if (args)
+        {
+            rt_uint8_t *hwid = (rt_uint8_t *)args;
+            *hwid = CCS811_HW_ID;
+            result = RT_EOK;
+        }
         break;
     case RT_SENSOR_CTRL_SET_MODE:
         sensor->config.mode = (rt_uint32_t)args & 0xFF;
@@ -239,15 +308,31 @@ static rt_err_t ccs811_control(struct rt_sensor_device *sensor, int cmd, void *a
         break;
     case RT_SENSOR_CTRL_GET_MEAS_MODE:
         LOG_D("Custom command : Get measure mode");
+        if (args)
+        {
+            result = _ccs811_get_measure_mode(i2c_bus, args);
+        }
         break;
     case RT_SENSOR_CTRL_SET_MEAS_MODE:
         LOG_D("Custom command : Set measure mode");
+        if (args)
+        {
+            result = _ccs811_set_measure_mode(i2c_bus, args);
+        }
         break;
     case RT_SENSOR_CTRL_SET_MEAS_CYCLE:
         LOG_D("Custom command : Set measure cycle");
+        if (args)
+        {
+            result = _ccs811_set_measure_cycle(i2c_bus, args);
+        }
         break;
     case RT_SENSOR_CTRL_SET_THRESHOLDS:
         LOG_D("Custom command : Set thresholds");
+        if (args)
+        {
+            result = _ccs811_set_thresholds(i2c_bus, args);
+        }
         break;
     default:
         return -RT_ERROR;
@@ -290,7 +375,7 @@ static rt_err_t _sensor_init(struct rt_i2c_bus_device *i2c_bus)
     }
 
     /* Get sensor id */
-    cmd[0] = CCS811_HW_ID;
+    cmd[0] = CCS811_REG_HW_ID;
     if (!read_word_from_command(i2c_bus, cmd, 1, 10, &hardware_id, 1))
         return -RT_ERROR;
 
@@ -307,9 +392,13 @@ static rt_err_t _sensor_init(struct rt_i2c_bus_device *i2c_bus)
     
     /* Set measurement mode */
     //setMeasurementMode(0,0,eMode4);
+    struct ccs811_meas_mode meas = {0, 0, CCS811_MODE_4};
+    _ccs811_set_measure_mode(i2c_bus, &meas);
 
     /* Set env data */
     //setInTempHum(25, 50);
+    struct ccs811_envdata envdata = {25, 50};
+    _ccs811_set_envdata(i2c_bus, &envdata);
 
     return RT_EOK;
 }
@@ -368,9 +457,9 @@ rt_err_t rt_hw_ccs811_init(const char *name, struct rt_sensor_config *cfg)
             goto __exit;
 
         sensor_eco2->info.type       = RT_SENSOR_CLASS_ECO2;
-        sensor_eco2->info.vendor     = RT_SENSOR_VENDOR_SENSIRION;
+        sensor_eco2->info.vendor     = RT_SENSOR_VENDOR_AMS;
         sensor_eco2->info.model      = "ccs811";
-        sensor_eco2->info.unit       = RT_SENSOR_UNIT_ONE;
+        sensor_eco2->info.unit       = RT_SENSOR_UNIT_PPM;
         sensor_eco2->info.intf_type  = RT_SENSOR_INTF_I2C;
         sensor_eco2->info.range_max  = SENSOR_ECO2_RANGE_MAX;
         sensor_eco2->info.range_min  = SENSOR_ECO2_RANGE_MIN;
@@ -397,9 +486,9 @@ rt_err_t rt_hw_ccs811_init(const char *name, struct rt_sensor_config *cfg)
             goto __exit;
 
         sensor_tvoc->info.type       = RT_SENSOR_CLASS_TVOC;
-        sensor_tvoc->info.vendor     = RT_SENSOR_VENDOR_SENSIRION;
+        sensor_tvoc->info.vendor     = RT_SENSOR_VENDOR_AMS;
         sensor_tvoc->info.model      = "ccs811";
-        sensor_tvoc->info.unit       = RT_SENSOR_UNIT_ONE;
+        sensor_tvoc->info.unit       = RT_SENSOR_UNIT_PPB;
         sensor_tvoc->info.intf_type  = RT_SENSOR_INTF_I2C;
         sensor_tvoc->info.range_max  = SENSOR_TVOC_RANGE_MAX;
         sensor_tvoc->info.range_min  = SENSOR_TVOC_RANGE_MIN;

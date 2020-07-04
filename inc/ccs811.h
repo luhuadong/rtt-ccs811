@@ -74,16 +74,23 @@ typedef enum
 
 } ccs811_mode_t;
 
-struct ccs811_baseline
-{
-    rt_uint16_t eco2_base;
-    rt_uint16_t tvoc_base;
-};
-
 struct ccs811_envdata
 {
     float temperature;
     float humidity;
+};
+
+struct ccs811_meas_mode
+{
+    rt_uint8_t    thresh;
+    rt_uint8_t    interrupt;
+    ccs811_mode_t mode;
+};
+
+struct ccs811_thresholds
+{
+    rt_uint16_t low_to_med;
+    rt_uint16_t med_to_high;
 };
 
 struct ccs811_device
@@ -98,6 +105,7 @@ struct ccs811_device
 };
 typedef struct ccs811_device *ccs811_device_t;
 
+/* Device APIs */
 rt_err_t        ccs811_init(struct ccs811_device *dev, const char *i2c_bus_name);
 ccs811_device_t ccs811_create(const char *i2c_bus_name);
 void            ccs811_delete(ccs811_device_t dev);
@@ -116,6 +124,7 @@ rt_uint16_t ccs811_get_baseline(ccs811_device_t dev);
 rt_bool_t   ccs811_set_baseline(ccs811_device_t dev, rt_uint16_t baseline);
 rt_bool_t   ccs811_set_envdata(ccs811_device_t dev, float temperature, float humidity);
 
+/* Sensor APIs */
 rt_err_t rt_hw_ccs811_init(const char *name, struct rt_sensor_config *cfg);
 
 #endif /* __CCS811_H__ */
