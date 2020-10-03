@@ -11,8 +11,8 @@
 #include <board.h>
 #include "ccs811.h"
 
-#define DBG_TAG "sensor.ams.ccs811"
-#define DBG_LVL DBG_INFO
+#define DBG_TAG                        "sensor.ams.ccs811"
+#define DBG_LVL                        DBG_LOG
 #include <rtdbg.h>
 
 /* range */
