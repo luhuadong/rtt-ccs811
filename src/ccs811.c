@@ -13,8 +13,12 @@
 #include <string.h>
 #include "ccs811.h"
 
-#define DBG_TAG                "sensor.ams.ccs811"
-#define DBG_LVL                DBG_LOG
+#define DBG_TAG                        "sensor.ams.ccs811"
+#ifdef PKG_USING_CCS811_DEBUG
+#define DBG_LVL                        DBG_LOG
+#else
+#define DBG_LVL                        DBG_ERROR
+#endif
 #include <rtdbg.h>
 
 
